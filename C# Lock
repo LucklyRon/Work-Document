@@ -1,0 +1,83 @@
+	1. 什么是锁？是干什么用的？
+	
+	当我们在使用线程的时候，效率最高的当然是异步，即多个线程同时运行，多个线程不相互依赖和等待。但是一旦多个线程都需要访问某个资源的时候，就需要同步机制了。当同一个资源在进行读写的时候，需要保证该资源在同一时刻只能被一个线程操作，才能确保每个操作是正确的有效的。
+	
+	Lock是C#中一种常用的同步方式。Lock的作用是为了保证在同一时刻同一资源只能被同一线程操作。
+	
+	2. Lock的用法和原理
+	
+	格式：lock(objectA){codeB}
+	1. 检查objectA是否被lock，没有则由我来lock，否则一直等待，直至objectA被释放。
+	2. lock以后在执行codeB的期间其他线程不能调用codeB。
+	3. 执行完codeB之后释放objectA，并且codeB可以被其他线程访问。
+	
+	简单的说就是当某个线程在访问lock(objectA){codeB}这种代码块的时候会先去检查objectA是否已经lock，如果没有lock则为其申请lock，并进入codeB执行，执行完毕释放objectA，如果已经被lock则等待objectA被别的线程"解锁"（释放）。
+	
+	3. objectA是所有的object都可以还是说有限制呢？
+	
+	从编译的现象上来看，lock不能lock值类型，为什么？
+	本质原因是因为值类型不同于引用类型，因为值类型没有同步索引块，这个问题可以参考值类型和引用类型的内存分配区别。
+	
+	lock(1)?  
+	lock((object)1?
+	常见的结构 lock (this)、lock (typeof (MyType)) 和 lock ("myLock") 违反此准
+	
+	Pasted from <https://msdn.microsoft.com/zh-cn/library/c5kehkcz(VS.80).aspx> 
+	
+	为什么？？？
+	1.lock(this)有什么问题？一定会有问题？
+	当多个线程需要访问同一使用了"lock(this)"资源时，可能会发生线程抢占同一资源的问题。
+	1.不同线程在访问同一个对象的"lock(this)"资源时不会有问题
+	2.不同线程在访问不同对象的"lock(this)"资源时会有问题抢占资源问题。
+	2.lock(string)有什么问题？
+	
+	在同一进程中，相同字符串属于同一对象，给字符串变量赋值不是修改它而是重新创建了新的对象。
+	
+	由于进程中使用同一字符串的任何其他代码将共享同一个锁，所以出现 lock(string) 问题
+	
+	3.lock(Type)有什么问题?
+	同理与lock(string)，lock的对象太广了。
+	
+	同时不能lock(null)，会抛异常。
+	在使用lock时应该尽量保证objectA是private static readonly
+	私有 private：确保只有该类的对象内部可以访问(在类的外部不可以操作对象，防止改变对象)
+           静态 static: 确保锁定的内容只有一份，不会出现锁不住的情况(保证只能初始化一次)
+	只读 readonly: 这是因为如果在lock代码段中改变objectA的值，其它线程就畅通无阻了，因为互斥锁的对象变了，object.ReferenceEquals必然返回false
+	
+	
+	4. Lock和Monitor
+	Monitor类可以通过Enter和Exit方法来实现线程同步。
+	
+	1.都是在指定对象上获取排它锁，用于同步代码区。
+	2.lock关键字是Monitor的一种替换用法，lock会在IL中被翻译成Monitor。这个可以类比Using这种写法。
+	
+	lock (x)
+	{
+	DoSomething();
+	} 
+	
+	等效于
+	
+	object obj = ( object )x;
+	System.Threading.Monitor.Enter(obj);
+	try 
+	{
+	DoSomething();
+	}
+	finally 
+	{
+	System.Threading.Monitor.Exit(obj);
+	} 
+	
+	3.使用lock关键字比Monitor更加简洁，而且保证了被锁对象一定会被释放，Monitor中重写了很多的方法，使用起来更容易控制锁。
+	
+	
+	5. 总结
+	lock是一种用来处理线程同步的机制，保证在同一时刻同一资源只能被一个线程操作而不会出现抢占资源的情况发生。
+	在使用线程的时候需要注意的地方lock关键字后边的对象尽量使用私有的静态的只读的。
+	在某些情况下使用Monitor比lock更容易控制，更加灵活。
+	
+	
+	6. To Do
+	1.继续把Monitor没有搞懂的地方研究下
+	2.把其他的一些线程同步的方式扩展一下，对比着学习。
