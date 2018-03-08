@@ -1,0 +1,55 @@
+	1. C#对可空值类型的支持
+	
+	(1) 由于Nullable<T>这种写法比较麻烦，C#用另外一种写法：T?   例如：
+	Int32? x=5;
+	Int32? y=null;
+	
+	(2) 允许开发人员在可空实例上进行转换和转型
+	
+	值类型和非空值类型可以相互转换， 并且还可以使用操作符。
+	
+	下面总结了C#如何解析操作符：
+	* 一元操作符 操作符是null,结果也是null
+	* 二元操作符 两个操作符中任何一个是null，结果就是null。但有一个例外，它发生在将&和|操作符应用于Boolean?操作数的时候。在这种情况下，这两个操作符的行为和SQL的三值逻辑一样的。对于这两个操作符，如果两个操作符都不是null，那么操作符和平常一样工作。如果两个操作符都是null，结果就是null。特殊情况就是其中之一为null时发生。下面列出了针对操作符的各种true，false和null组合：
+操作符→
+true
+false
+null
+操作符↓
+ 
+ 
+ 
+true
+& = true
+| = true
+& = false
+|  = true
+& = null
+|  = true 
+false
+& = false
+|  = true
+& = false
+|  = false
+& = false
+|  = null 
+null
+& = null
+|  = true
+& = false
+|  = null
+& = null
+|  = null
+	 
+	* 相等性操作 两个操作符都是null，两者相等。一个操作符为null，则两个不相等。两个操作数都不是null，就比较值来判断是否相等。
+	* 关系操作符 两个操作符任何一个是null，结果就是false。两个操作数都不是null，就比较值。
+
+	2. C#的空结合操作符
+	
+	C#提供了一个所谓的"空结合操作符"，即??操作符，它要获取两个操作符。假如左边的操作符不为null，就返回操作符这个操作符的值。如果左边的操作符为null，就返回右边的操作符的值。利用空接合操作符，可方便地设置的默认值。空接合操作符的一个妙处在于，它既能用于引用类型也能用于可空值类型。
+	
+	Func<String> f = () => SomeMethod () ?? "Untitled";
+	Func<String> f = () => { var temp = SomeMethod(); return  temp !=null ?temp : "Untitled"; }
+	
+	
+	String s = SomeMethod()  ??  SomeMethod2()  ??  "Untitled";
