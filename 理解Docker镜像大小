@@ -1,0 +1,60 @@
+都说容器大法好，可是假设没有Docker镜像，Docker该是多无趣啊。
+
+是否还记得第一个接触Docker的时候，你从Docker Hub下拉的那个镜像呢？在那个处女镜像的基础上。你执行了容器生涯的处女容器。镜像的基石作用已经非常明显。在Docker的世界里，能够说是：No Image，No Container。
+再进一步思考Docker镜像，大家可能非常快就会联想到下面几类镜像：
+1.系统级镜像:如Ubuntu镜像。CentOS镜像以及Debian容器等；
+2.工具栈镜像:如Golang镜像。Flask镜像，Tomcat镜像等；
+3.服务级镜像:如MySQL镜像，MongoDB镜像。RabbitMQ镜像等；
+4.应用级镜像:如WordPress镜像，DockerRegistry镜像等。
+镜像林林总总。想要执行Docker容器。必须要有Docker镜像；想要有Docker镜像，必须要先下载Docker镜像。既然涉及到下载Docker镜像，自然会存在Docker镜像存储。谈到Docker镜像存储，那我们首先来聊聊Docker镜像大小方面的知识。
+下面将从三个角度来分析Docker镜像的大小问题：Dockerfile与镜像、联合文件系统以及镜像共享关系。
+
+Dockerfile与镜像
+Dockerfile由多条指令构成，随着深入研究Dockerfile与镜像的关系，非常快大家就会发现。Dockerfile中的每一条指令都会相应于Docker镜像中的一层。
+继续以例如以下Dockerfile为例：
+FROM ubuntu:14.04
+ADD run.sh /
+VOLUME /data
+CMD ["./run.sh"]
+通过docker build以上Dockerfile的时候。会在Ubuntu:14.04镜像基础上，加入三层独立的镜像，依次相应于三条不同的命令。
+镜像示意图例如以下：
+
+有了Dockerfile与镜像关系的初步认识之后，我们再进一步联系到每一层镜像的大小。
+不得不说，在层级化管理的Docker镜像中。有不少层大小都为0。
+那些镜像层大小不为0的情况，归根结底的原因是：构建Docker镜像时，对当前的文件系统造成了改动更新。
+而改动更新的情况主要有两种：
+1.ADD或COPY命令:ADD或者COPY的作用是在docker build构建镜像时向容器中加入内容。仅仅要内容加入成功，当前构建的那层镜像就是加入内容的大小，如以上命令ADD run.sh /。新构建的那层镜像大小为文件run.sh的大小。
+2.RUN命令:RUN命令的作用是在当前空的镜像层内执行一条命令，倘若执行的命令须要更新磁盘文件。那么全部的更新内容都在存储在当前镜像层中。
+举例说明：RUN echo DaoCloud命令不涉及文件系统内容的改动，故命令执行完之后当前镜像层的大小为0；RUN wget http://abc.com/def.tar 命令会将压缩包下载至当前文件夹下，因此当前这一层镜像的大小为:对文件系统内容的增量改动部分，即def.tar文件的大小。
+
+联合文件系统
+Dockerfile中命令与镜像层一一相应。那么是否意味着docker build完成之后。镜像的总大小＝每一层镜像的大小总和呢？答案是肯定的。
+依旧以上图为例：假设ubuntu:14.04镜像的大小为200MB，而run.sh的大小为5MB，那么以上三层镜像从上到下，每层大小依次为0、0以及5MB，那么终于构建出的镜像大小的确为0+0+5+200=205MB。
+尽管终于镜像的大小是每层镜像的累加，可是须要额外注意的是：Docker镜像的大小并不等于容器中文件系统内容的大小（不包含挂载文件，/proc、/sys等虚拟文件）。个中缘由，就和联合文件系统有非常大的关系了。
+首先来看一下这个简单的Dockerfile样例(假如在Dockerfile当前文件夹下有一个100MB的压缩文件compressed.tar):
+FROM ubuntu:14.04
+ADD compressed.tar /
+RUN rm /compressed.tar
+ADD compressed.tar /
+1.FROM ubuntu:镜像ubuntu:14.04的大小为200MB；
+2.ADD compressed.tar /: compressed.tar文件为100MB，因此当前镜像层的大小为100MB，镜像总大小为300MB。
+3.RUN rm /compressed.tar:删除文件compressed.tar,此时的删除并不会删除下一层的compressed.tar文件。仅仅会在当前层产生一个compressed.tar的删除标记，确保通过该层将看不到compressed.tar,因此当前镜像层的大小也为0。镜像总大小为300MB。
+4.ADD compressed.tar /:compressed.tar文件为100MB，因此当前镜像层的大小为300MB+100MB。镜像总大小为400MB。
+分析完成之后，我们发现镜像的总大小为400MB。可是假设执行该镜像的话，我们非常快能够发如今容器根文件夹下执行du -sh之后。显示的数值并不是400MB，而是300MB左右。基本的原因还是：联合文件系统的性质保证了两个拥有compressed.tar文件的镜像层，仅仅会容器看到一个。同一时候这也说明了一个现状，当用户基于一个非常大，甚至好几个GB的镜像执行容器时。在容器内部查看根文件夹大小，发现居然仅仅有500MB不到，设置更小。
+分析至此，有一点大家须要非常注意：镜像大小和容器大小有着本质的差别。
+
+镜像共享关系
+Docker镜像说大不大，说小不小。可是一旦镜像的总数上来之后，岂不是对本地磁盘造成非常大的存储压力？平均每一个镜像500MB，岂不是100个镜像就须要准备50GB的存储空间？
+结果往往不是我们想象的那样，Docker在镜像复用方面设计得非常出色，大大节省镜像占用的磁盘空间。
+Docker镜像的复用主要体如今：多个不同的Docker镜像能够共享同样的镜像层。
+假设本地镜像存储中仅仅有一个ubuntu:14.04的镜像。我们以两个Dockerfile来说明镜像复用：
+FROM ubuntu:14.04
+RUN apt-get update
+FROM ubuntu:14.04
+ADD compressed.tar /
+假设终于docker build构建出来的镜像名分别为image1和image2。因为两个Dockerfile均基于ubuntu:14.04。因此。image1和image2这两个镜像均复用了镜像ubuntu:14.04。
+假设RUN apt-get update改动的文件系统内容为20MB，终于本地三个镜像的大小关系应该例如以下：
+ubuntu:14.04: 200MB
+image1:200MB(ubuntu:14.04)+20MB=220MB
+image2:200MB(ubuntu:14.04)+100MB=300MB
+假设仅仅是单纯的累加三个镜像的大小，那结果应该是：200+220+300=720MB，可是因为镜像复用的存在，实际占用的磁盘空间大小是：200＋20+100=320MB，足足节省了400MB的磁盘空间。在此，足以证明镜像复用的巨大优点。
